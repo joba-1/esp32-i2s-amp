@@ -11,7 +11,7 @@
 #include <Arduino.h>
 
 #include "AudioTools.h"
-#include "AudioCodecs/ContainerBinary.h"
+#include "AudioCodecs/ContainerOgg.h"
 #include "AudioCodecs/CodecADPCM.h"
 // can hang #include "AudioCodecs/CodecSBC.h"
 // noise #include "AudioCodecs/CodecAPTX.h"
@@ -122,7 +122,8 @@ private:
 
 I2SStream i2s;  // sink MAX98357A mono amp
 Convert cvt(i2s);  // 1ch -> 2ch as required for the mono amp - go figure... :)
-BinaryContainerDecoder bcd(new ADPCMDecoder(AV_CODEC_ID_ADPCM_IMA_WAV));
+ADPCMDecoder adpcm(AV_CODEC_ID_ADPCM_IMA_WAV);
+OggContainerDecoder bcd(&adpcm);
 EncodedAudioStream dec(&cvt, &bcd);
 // can hang EncodedAudioStream dec(&cvt, new BinaryContainerDecoder(new SBCDecoder()));
 // noise EncodedAudioStream dec(&cvt, new BinaryContainerDecoder(new APTXDecoder()));
@@ -166,7 +167,7 @@ void loop() {
     LOGE("Decoder restart")
     dec.clearWriteError();
     dec.decoder().end();
-    dec.decoder().begin();
+    dec.decoder().begin(in);
     last_copy = now;
   }
 }
