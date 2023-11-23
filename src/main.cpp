@@ -123,8 +123,8 @@ private:
 I2SStream i2s;  // sink MAX98357A mono amp
 Convert cvt(i2s);  // 1ch -> 2ch as required for the mono amp - go figure... :)
 ADPCMDecoder adpcm(AV_CODEC_ID_ADPCM_IMA_WAV);
-OggContainerDecoder bcd(&adpcm);
-EncodedAudioStream dec(&cvt, &bcd);
+// OggContainerDecoder bcd(&adpcm);
+EncodedAudioStream dec(&cvt, &adpcm);
 // can hang EncodedAudioStream dec(&cvt, new BinaryContainerDecoder(new SBCDecoder()));
 // noise EncodedAudioStream dec(&cvt, new BinaryContainerDecoder(new APTXDecoder()));
 // silent errors EncodedAudioStream dec(&cvt, new BinaryContainerDecoder(new LC3Decoder()));
@@ -146,7 +146,7 @@ void setup() {
 
   i2s.begin(icfg);
   dec.begin(in);
-  bcd.setAudioInfo(in);
+  // bcd.setAudioInfo(in);
 
   uint8_t rx=15;
   uint8_t tx=22;
@@ -164,7 +164,7 @@ void loop() {
     last_copy = now;
   }
   else if( now - last_copy > Timeout ) {
-    LOGE("Decoder restart")
+    LOGE("Decoder restart");
     dec.clearWriteError();
     dec.decoder().end();
     dec.decoder().begin(in);
