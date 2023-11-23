@@ -4,7 +4,6 @@
  * - #define COPY_LOG_OFF or change AudioLogger level to Warning to avoid hickups
  * - Adjust pin numbers in setup() according to your board
  * - Works fine with git main of ESP32 pio platform and arduino-audio-tools as of Nov 2023
- * - Works with I2S_MSB_FORMAT (datasheet), and also with I2S_STD_FORMAT, I2S_PHILIPS_FORMAT or I2S_LEFT_JUSTIFIED_FORMAT
  * 
  * have fun, JoBa-1
  */
@@ -12,7 +11,11 @@
 #include <Arduino.h>
 
 #include "AudioTools.h"
+#include "AudioCodecs/ContainerBinary.h"
 #include "AudioCodecs/CodecADPCM.h"
+// can hang #include "AudioCodecs/CodecSBC.h"
+// noise #include "AudioCodecs/CodecAPTX.h"
+// silent errors #include "AudioCodecs/CodecLC3.h"
 
 
 // Type of a channel sample, number of channels and sample rate
@@ -32,9 +35,6 @@ constexpr size_t OutChanBits = OutChanBytes * CHAR_BIT;
 
 AudioInfo in(SampleRate, InChans, InChanBits);
 AudioInfo out(SampleRate, OutChans, OutChanBits);
-
-
-bool decoder_error = false;
 
 
 /**
@@ -101,9 +101,6 @@ public:
       LOGI("Written/%u %u Bytes/s", factor, _written/factor);
       LOGI("Read      %u Bytes/s", _read);
       LOGI("Amplitude %u", _maxval);
-      if( _written == 0 ) {
-        decoder_error = true;
-      }
       _written = 0;
       _read = 0;
       _maxval = 0;
@@ -123,9 +120,13 @@ private:
 };
 
 
-I2SStream i2s;  // MAX98357A mono amp
-Convert cvt(i2s);
-EncodedAudioStream dec(&cvt, new ADPCMDecoder(AV_CODEC_ID_ADPCM_IMA_WAV));
+I2SStream i2s;  // sink MAX98357A mono amp
+Convert cvt(i2s);  // 1ch -> 2ch as required for the mono amp - go figure... :)
+BinaryContainerDecoder bcd(new ADPCMDecoder(AV_CODEC_ID_ADPCM_IMA_WAV));
+EncodedAudioStream dec(&cvt, &bcd);
+// can hang EncodedAudioStream dec(&cvt, new BinaryContainerDecoder(new SBCDecoder()));
+// noise EncodedAudioStream dec(&cvt, new BinaryContainerDecoder(new APTXDecoder()));
+// EncodedAudioStream dec(&cvt, new BinaryContainerDecoder(new LC3Decoder()));
 StreamCopy copier(dec, Serial1, 1024); 
 
 
@@ -143,6 +144,7 @@ void setup() {
 
   i2s.begin(icfg);
   dec.begin(in);
+  // bcd.setAudioInfo(in);
 
   uint8_t rx=15;
   uint8_t tx=22;
@@ -153,11 +155,17 @@ void setup() {
 
 
 void loop() {
-  copier.copy();
-  if( decoder_error ) {
-    decoder_error = false;
+  static const uint32_t Timeout = 1000;
+  static uint32_t last_copy = 0;
+  uint32_t now = millis();
+  if( copier.copy() ) {
+    last_copy = now;
+  }
+  else if( now - last_copy > Timeout ) {
+    LOGE("Decoder restart")
     dec.clearWriteError();
     dec.decoder().end();
     dec.decoder().begin();
+    last_copy = now;
   }
 }
